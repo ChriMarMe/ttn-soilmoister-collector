@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,7 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/lib/pq"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/mitchellh/mapstructure"
 )
 
 const (
@@ -25,18 +29,30 @@ const (
 	ttnTopic    = "v3/soilmoisturefh@ttn/devices/eui-a8404156f182ef00/up"
 
 	// DB server config
-	postgreServer = "postgres:5432"
-	postgresUser  = "moisterCollector"
-	postgresPW    = "thisyouwantknow"
+	pgServer = "postgres"
+	pgPort   = "5432"
+	pgUser   = "postgres"
+	pgPW     = "adminpw"
+	pgDB     = "internet_of_dinge"
+	pgTable  = "iotproject.soilmoisture"
 
-	postgresTable = "iotproject.soilmoisture"
+	// Insert string for postgresql database
+	insert = `INSERT INTO iotproject.soilmoisture(hardware_flag,interrupt_flag,sensor_flag,tempc_ds18b20,batterie,conduct_soil,temp_soil,water_soil) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`
 )
 
-type dbWriter struct{}
+var (
+	conString = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", pgServer, pgPort, pgUser, pgPW, pgDB)
+)
+
+type dbWriter struct {
+	c chan map[string]interface{}
+}
 
 func NewdbWriter() *dbWriter {
 	//Open connection to db here
-	return &dbWriter{}
+	return &dbWriter{
+		c: make(chan map[string]interface{}),
+	}
 }
 
 type Message struct {
@@ -44,18 +60,18 @@ type Message struct {
 }
 
 func (w *dbWriter) handle(_ mqtt.Client, msg mqtt.Message) {
-	var m Message
-	if err := json.Unmarshal(msg.Payload(), &m.Data); err != nil {
+	var m map[string]interface{}
+	if err := json.Unmarshal(msg.Payload(), &m); err != nil {
 		fmt.Printf("json.Unmarshall(msg.Payload(), &m):= %q, want nil", err)
 	}
-	for _, item := range m.Data {
+	for _, item := range m {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "%v", item)
 
 		if strings.Contains(buf.String(), "decoded_payload") {
 			for iterator, item2 := range item.(map[string]interface{}) {
 				if iterator == "decoded_payload" {
-					fmt.Printf("Item: %v\n", item2) // <== This will contain the magic we need.
+					w.c <- item2.(map[string]interface{}) // <== This will contain the magic we need.
 				}
 			}
 		}
@@ -64,6 +80,8 @@ func (w *dbWriter) handle(_ mqtt.Client, msg mqtt.Message) {
 }
 
 func main() {
+
+	// Setup mqtt connection
 	mqtt.ERROR = log.New(os.Stdout, "[ERROR] ", 0)
 	mqtt.CRITICAL = log.New(os.Stdout, "[CRITICAL] ", 0)
 	mqtt.WARN = log.New(os.Stdout, "[WARN]  ", 0)
@@ -107,6 +125,19 @@ func main() {
 		fmt.Println("attempting to reconnect")
 	}
 
+	// Setup postgres connection
+	fmt.Println(conString)
+	db, err := sql.Open("postgres", conString)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	// Try to establish connection
+	if err := db.Ping(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
@@ -122,5 +153,36 @@ func main() {
 	fmt.Println("signal caught - exiting")
 	client.Disconnect(1000)
 	fmt.Println("shutdown complete")
-
 }
+
+type sensordata struct {
+	Bat            float32
+	Hardware_Flag  uint8
+	Interrupt_Flag uint8
+	Sensor_Flag    uint8
+	TempC_DS18B20  string
+	conduct_SOIL   uint16
+	temp_SOIL      float32
+	water_SOIL     float32
+}
+
+func WriteToDb(c chan map[string]interface{}, db *sql.DB) {
+	var data sensordata
+	for item := range c {
+		mapstructure.Decode(item, &data)
+	}
+	fmt.Println(data)
+}
+
+/*
+iotproject.soilmoisture
+uid INTEGER NOT NULL PRIMARY KEY,
+    hardware_flag VARCHAR(1),
+    interrupt_flag VARCHAR(1),
+    sensor_flag VARCHAR(1),
+    tempc_ds18b20 REAL,
+    batterie REAL,
+    conduct_soil REAL,
+    temp_soil REAL,
+    water_soil REAL
+*/
