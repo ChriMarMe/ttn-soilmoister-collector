@@ -161,15 +161,19 @@ type sensordata struct {
 	Hardware_Flag  uint8
 	Interrupt_Flag uint8
 	Sensor_Flag    uint8
-	TempC_DS18B20  string
-	conduct_SOIL   uint16
-	temp_SOIL      float32
-	water_SOIL     float32
+	TempC_DS18B20  uint8
+	Conduct_SOIL   float32
+	Temp_SOIL      string
+	Water_SOIL     string
 }
 
 func WriteToDb(c chan map[string]interface{}, db *sql.DB) {
 	var data sensordata
 	for item := range c {
+		fmt.Println(item)
+		for fieldname, value := range item {
+			fmt.Printf("Fieldname: %s Type: %T\n", fieldname, value)
+		}
 		mapstructure.Decode(item, &data)
 		fmt.Println(data)
 	}
