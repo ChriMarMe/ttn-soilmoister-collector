@@ -137,6 +137,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	go WriteToDb(h.c, db)
 
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
@@ -170,8 +171,8 @@ func WriteToDb(c chan map[string]interface{}, db *sql.DB) {
 	var data sensordata
 	for item := range c {
 		mapstructure.Decode(item, &data)
+		fmt.Println(data)
 	}
-	fmt.Println(data)
 }
 
 /*
