@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,7 +38,7 @@ const (
 	pgTable  = "iotproject.soilmoisture"
 
 	// Insert string for postgresql database
-	insert = `INSERT INTO iotproject.soilmoisture(hardware_flag,interrupt_flag,sensor_flag,tempc_ds18b20,batterie,conduct_soil,temp_soil,water_soil) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`
+	insertString = `INSERT INTO iotproject.soilmoisture(hardware_flag,interrupt_flag,sensor_flag,tempc_ds18b20,batterie,conduct_soil,temp_soil,water_soil) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`
 )
 
 var (
@@ -175,7 +176,19 @@ func WriteToDb(c chan map[string]interface{}, db *sql.DB) {
 			fmt.Printf("Fieldname: %s Type: %T\n", fieldname, value)
 		}
 		mapstructure.Decode(item, &data)
-		fmt.Println(data)
+		tempSoil, err := strconv.ParseFloat(data.Temp_SOIL, 32)
+		if err != nil {
+			fmt.Println(err)
+		}
+		waterSoil, err := strconv.ParseFloat(data.Water_SOIL, 32)
+		if err != nil {
+			fmt.Println(err)
+		}
+		res, err := db.Exec(insertString, data.Bat, data.Hardware_Flag, data.Interrupt_Flag, data.Sensor_Flag, data.TempC_DS18B20, data.Conduct_SOIL, tempSoil, waterSoil)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(res)
 	}
 }
 
