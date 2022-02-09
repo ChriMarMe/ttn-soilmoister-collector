@@ -38,7 +38,7 @@ const (
 	pgTable  = "iotproject.soilmoisture"
 
 	// Insert string for postgresql database
-	insertString = `INSERT INTO iotproject.soilmoisture(hardware_flag,interrupt_flag,sensor_flag,tempc_ds18b20,batterie,conduct_soil,temp_soil,water_soil) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`
+	insertString = `INSERT INTO iotproject.soilmoisture(batterie,hardware_flag,interrupt_flag,sensor_flag,tempc_ds18b20,conduct_soil,temp_soil,water_soil) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`
 )
 
 var (
